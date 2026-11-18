@@ -17,7 +17,7 @@ RUN set -eu; \
     curl --fail --location --retry 3 --output SHA256SUMS "${url}/SHA256SUMS"; \
     awk -v name="$archive" '$2 == name || $2 == "*" name { print }' SHA256SUMS > selected.sha256; \
     test "$(wc -l < selected.sha256)" -eq 1; \
-    sha256sum --check selected.sha256; \
+    sha256sum -c selected.sha256; \
     mkdir -p /out/licenses; \
     tar -xzf "$archive" -C /out ente; \
     chmod 0755 /out/ente; \
