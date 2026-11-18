@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Download on the builder's architecture; the binary is selected for the target.
-FROM --platform=$BUILDPLATFORM alpine:3.23 AS download
+FROM --platform=$BUILDPLATFORM alpine:3.24 AS download
 ARG TARGETARCH
 ARG ENTE_CLI_VERSION
 
@@ -26,7 +26,7 @@ RUN set -eu; \
     printf 'Unmodified Ente Rust CLI %s\nLicense: AGPL-3.0\nSource: https://github.com/ente/ente/tree/%s\nSource archive: https://github.com/ente/ente/archive/refs/tags/%s.tar.gz\nBuild instructions: .github/workflows/ente-cli-release.yml in the source archive\n' \
       "$ENTE_CLI_VERSION" "$tag" "$tag" > /out/licenses/NOTICE
 
-FROM alpine:3.23
+FROM alpine:3.24
 ARG ENTE_CLI_VERSION
 LABEL org.opencontainers.image.title="Ente CLI (Rust)" \
       org.opencontainers.image.description="Unofficial container for the unmodified Ente Rust CLI" \
