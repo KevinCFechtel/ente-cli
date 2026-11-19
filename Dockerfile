@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 
+
 # Build natively for each target. Do not reuse the upstream amd64 binary:
 # 0.4.5 executes AVX even during ring's CPU detection (SIGILL on e.g. J4125).
-FROM rust:1-alpine3.23 AS build
+FROM rust:1-alpine3.24 AS build
 ARG TARGETARCH
 ARG ENTE_CLI_VERSION
 
@@ -37,7 +38,7 @@ RUN set -eu; \
     printf 'Ente Rust CLI %s, built from unmodified source with generic CPU flags\nLicense: AGPL-3.0\nSource: https://github.com/ente/ente/tree/%s\nSource archive: https://github.com/ente/ente/archive/%s.tar.gz\nBuild instructions: Dockerfile in the container source repository (org.opencontainers.image.source label)\n' \
       "$ENTE_CLI_VERSION" "$revision" "$revision" > /out/licenses/NOTICE
 
-FROM alpine:3.23
+FROM alpine:3.24
 ARG ENTE_CLI_VERSION
 LABEL org.opencontainers.image.title="Ente CLI (Rust)" \
       org.opencontainers.image.description="Unofficial Ente Rust CLI built from source for generic CPUs" \
