@@ -75,23 +75,23 @@ def release_notes(release, image, revision):
     version = release["tag_name"].removeprefix("ente-cli-v")
     tag = release["tag_name"]
     # Keep upstream notes verbatim, including contributor credits and links.
-    body = release.get("body") or "_Upstream hat keine Release Notes veröffentlicht._"
+    body = release.get("body") or "_Upstream did not publish any release notes._"
     return (
         f"# Ente CLI Container {version}\n\n"
-        f"Aus unverändertem Quellcode gebaute **Rust-CLI {version}** aus "
+        f"**Rust CLI {version}** built from unmodified source from "
         f"[{UPSTREAM} / {tag}]({release['html_url']}).\n\n"
         f"## Container\n\n"
-        f"- Image: `{image}:{version}` (auch `:latest`)\n"
-        f"- Plattformen: `linux/amd64`, `linux/arm64`\n"
-        f"- Build: nativ aus Quellcode mit `Cargo.lock`; amd64 ohne AVX-Pflicht "
-        f"(generische Rust- und C/C++-CPU-Flags).\n"
-        f"- amd64-Prüfung: HTTPS/TLS unter QEMU mit CPU `Nehalem` ohne AVX.\n"
-        f"- Container-Quellstand: [{revision}]"
+        f"- Image: `{image}:{version}` (also `:latest`)\n"
+        f"- Platforms: `linux/amd64`, `linux/arm64`\n"
+        f"- Build: natively from source with `Cargo.lock`; amd64 without an AVX requirement "
+        f"(generic Rust and C/C++ CPU flags).\n"
+        f"- amd64 validation: HTTPS/TLS under QEMU with a `Nehalem` CPU without AVX.\n"
+        f"- Container source revision: [{revision}]"
         f"(https://github.com/{image.removeprefix('ghcr.io/')}/commit/{revision})\n"
-        f"- [CLI-Quellcode](https://github.com/{UPSTREAM}/tree/{tag}) · "
-        f"[Quellcode-Archiv](https://github.com/{UPSTREAM}/archive/refs/tags/{tag}.tar.gz)\n"
-        f"- CLI: AGPL-3.0; Container-Builddateien: BSD-3-Clause.\n\n"
-        f"## Änderungen der Ente Rust CLI (Upstream)\n\n{body}\n"
+        f"- [CLI source code](https://github.com/{UPSTREAM}/tree/{tag}) · "
+        f"[Source archive](https://github.com/{UPSTREAM}/archive/refs/tags/{tag}.tar.gz)\n"
+        f"- CLI: AGPL-3.0; container build files: BSD-3-Clause.\n\n"
+        f"## Ente Rust CLI changes (upstream)\n\n{body}\n"
     )
 
 

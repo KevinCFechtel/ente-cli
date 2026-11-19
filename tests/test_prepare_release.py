@@ -89,12 +89,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn("ghcr.io/owner/repo:0.4.4", notes)
         self.assertIn("ente-cli-v0.4.4.tar.gz", notes)
         self.assertIn("https://github.com/owner/repo/commit/abc123", notes)
-        self.assertIn("ohne AVX-Pflicht", notes)
+        self.assertIn("without an AVX requirement", notes)
         self.assertIn("Nehalem", notes)
 
     def test_empty_notes_have_fallback(self):
         notes = subject.release_notes(release(body=None), "ghcr.io/owner/repo", "HEAD")
-        self.assertIn("keine Release Notes", notes)
+        self.assertIn("did not publish any release notes", notes)
 
     def test_build_decision_and_outputs(self):
         for existing, force, expected in [

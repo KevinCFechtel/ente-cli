@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: "Aktuelle Version erneut bauen (z. B. für Basisimage-Updates)"
+        description: "Rebuild the current version (e.g. for base image updates)"
         type: boolean
         default: false
   push:
@@ -58,7 +58,7 @@ jobs:
           SHOULD_BUILD: ${{ steps.release.outputs.should_build }}
           VERSION: ${{ steps.release.outputs.version }}
         run: |
-          printf 'Rust CLI: **%s** · Build erforderlich: **%s**\n' \
+          printf 'Rust CLI: **%s** · Build required: **%s**\n' \
             "$VERSION" "$SHOULD_BUILD" >> "$GITHUB_STEP_SUMMARY"
 
   validate:
@@ -180,7 +180,7 @@ jobs:
         run: |
           # Literal Markdown backticks, not shell command substitutions.
           # shellcheck disable=SC2016
-          printf '\n## Image-Digest\n\n`%s@%s`\n' "$IMAGE" "$DIGEST" \
+          printf '\n## Image digest\n\n`%s@%s`\n' "$IMAGE" "$DIGEST" \
             >> .release/release-notes.md
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release edit "$TAG" --draft=false --latest \
