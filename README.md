@@ -1,113 +1,113 @@
 # Ente CLI Container (Rust)
 
-Inoffizielles Multi-Arch-Container-Image für die neue, in Rust geschriebene
-[Ente CLI](https://ente.com/help/cli/). Die alte Go-CLI wird nicht verwendet.
+Unofficial multi-architecture container image for the new Rust-based
+[Ente CLI](https://ente.com/help/cli/). The old Go CLI is not used.
 
-## Automatische Builds und Changelogs
+## Automated builds and changelogs
 
-Der [GitHub-Actions-Workflow](.github/workflows/container.yml):
+The [GitHub Actions workflow](.github/workflows/container.yml):
 
-1. prüft täglich um **05:23 UTC** die Releases von `ente/ente`;
-2. wählt die semantisch höchste stabile Version mit Tag `ente-cli-vX.Y.Z`
-   (keine Go-Releases, Entwürfe oder Vorabversionen);
-3. überspringt bereits veröffentlichte Container-Versionen;
-4. baut die unveränderten Quellen des Release-Tags mit `Cargo.lock` nativ für
-   **linux/amd64** und **linux/arm64**, mit generischen Rust- und C/C++-CPU-Flags;
-5. testet beide Images als Nicht-Root-Benutzer und prüft auf amd64 zusätzlich
-   HTTPS/TLS unter QEMU mit einer **Nehalem-CPU ohne AVX**;
-6. veröffentlicht genau diese getesteten Images als Multi-Arch-Image auf **GHCR**;
-7. erstellt ein GitHub Release `vX.Y.Z` mit den **unveränderten Upstream-Release-Notes**,
-   Quellcode-Links und dem Image-Digest.
+1. checks releases from `ente/ente` daily at **05:23 UTC**;
+2. selects the highest stable semantic version tagged `ente-cli-vX.Y.Z`
+   (excluding Go releases, drafts, and prereleases);
+3. skips container versions that have already been published;
+4. builds the unmodified release-tag sources with `Cargo.lock` natively for
+   **linux/amd64** and **linux/arm64**, using generic Rust and C/C++ CPU flags;
+5. tests both images as a non-root user and additionally tests HTTPS/TLS on amd64
+   under QEMU with a **Nehalem CPU without AVX**;
+6. publishes those exact tested images as a multi-architecture image on **GHCR**;
+7. creates a GitHub release `vX.Y.Z` with the **unmodified upstream release notes**,
+   source code links, and the image digest.
 
 Image: `ghcr.io/kevincfechtel/ente-cli`
 
-Tags: `:X.Y.Z` und `:latest`, außerdem `:X.Y.Z-amd64` und `:X.Y.Z-arm64`.
-Die GitHub Releases sind der Container-Changelog;
-es werden dafür keine automatischen Commits auf `main` benötigt.
-Beim ersten Lauf wird nur die aktuellste stabile Version gebaut, kein historisches
-Archiv. Auch nach einer Pause wird die aktuellste Version übernommen; dazwischen
-erschienene Releases werden nicht nachträglich gebaut.
+Tags: `:X.Y.Z` and `:latest`, plus `:X.Y.Z-amd64` and `:X.Y.Z-arm64`.
+GitHub releases serve as the container changelog;
+no automated commits to `main` are needed.
+The first run builds only the latest stable version, not a historical archive.
+After a pause, the latest version is picked up; intermediate releases are not
+built retroactively.
 
-Pushes auf `main` bauen die aktuelle CLI-Version erneut, damit Änderungen am
-Container direkt veröffentlicht werden. Pull Requests testen beide Architekturen,
-veröffentlichen aber nichts. Ein manueller Lauf unter **Actions → Ente CLI container
-→ Run workflow** prüft ebenfalls auf Updates; mit `force` wird die aktuelle
-Version erneut gebaut, etwa für Basisimage-Sicherheitsupdates.
-Bei einem Rebuild werden die Image-Tags und Release Notes aktualisiert; wer ein
-unveränderliches Image benötigt, verwendet den Digest aus dem Release.
-Der Git-Tag eines bestehenden Releases bleibt beim ursprünglichen Commit;
-der tatsächlich verwendete Container-Quellstand steht in den Release Notes und
-im OCI-Label `org.opencontainers.image.revision`.
+Pushes to `main` rebuild the current CLI version so that container changes can be
+published immediately. Pull requests test both architectures but do not publish
+anything. A manual run under **Actions → Ente CLI container → Run workflow** also
+checks for updates; enabling `force` rebuilds the current version, for example
+to pick up base image security updates.
+A rebuild updates the image tags and release notes; for an immutable image,
+use the digest provided in the release.
+The Git tag of an existing release stays at its original commit;
+the container source revision actually used is recorded in the release notes
+and the OCI label `org.opencontainers.image.revision`.
 
-Fehlgeschlagene Builds oder Pushes erzeugen kein neues erfolgreiches GitHub Release;
-bei noch nicht veröffentlichten Versionen versucht der nächste tägliche Lauf es erneut.
-Schlägt ein Rebuild einer bereits veröffentlichten Version fehl, erneut mit `force`
-starten oder nach einem weiteren Push auf `main` wiederholen.
-Fehlende Upstream-Assets und API-Fehler brechen den Lauf ab, statt versehentlich
-eine andere CLI-Version zu veröffentlichen.
+Failed builds or pushes do not create a new successful GitHub release;
+for unpublished versions, the next daily run retries publication.
+If a rebuild of an already published version fails, rerun it with `force`
+or retry after another push to `main`.
+Missing upstream assets and API errors abort the run rather than accidentally
+publishing a different CLI version.
 
-### Synology und Prozessoren ohne AVX
+### Synology and CPUs without AVX
 
-Das offizielle amd64-Binary von Ente CLI 0.4.5 führt in der Kryptografie-Bibliothek
-`ring` eine AVX-Anweisung aus. Auf beispielsweise einem Intel Celeron J4125
-führt das beim Login oder bei HTTPS-Zugriffen zu `SIGILL` / Exit-Code **132**.
-Dieses Image baut deshalb die CLI samt nativen Abhängigkeiten selbst, ohne
-AVX als Voraussetzung. Der Quellcode der CLI bleibt unverändert.
-Der zusätzliche Test übt die TLS-Zertifikatsprüfung gegen einen lokalen
-Testserver aus – nicht nur `--version`. Er benötigt weder ein Ente-Konto noch
-Zugangsdaten und kontaktiert keinen echten Ente-Server.
+The official Ente CLI 0.4.5 amd64 binary executes an AVX instruction in the
+`ring` cryptography library. On CPUs such as the Intel Celeron J4125,
+this causes `SIGILL` / exit code **132** during login or HTTPS requests.
+This image therefore builds the CLI and its native dependencies from source
+without requiring AVX. The CLI source code remains unmodified.
+The additional test exercises TLS certificate verification against a local
+test server, not just `--version`. It requires neither an Ente account nor
+credentials and does not contact a real Ente server.
 
-Nach Push der Container-Änderung auf `main` wird auch eine bereits veröffentlichte
-CLI-Version neu gebaut. Erst wenn alle Prüfungen bestanden wurden, werden deren
-Image-Tag und `latest` aktualisiert. Anschließend auf dem Docker-Host im
-Compose-Verzeichnis ausführen:
+Pushing the container change to `main` rebuilds the CLI version even if it has
+already been published. Its image tag and `latest` are updated only after all
+checks pass. Afterwards, run the following on the Docker host from the
+Compose directory:
 
 ```sh
 sudo docker compose pull
 sudo docker compose up -d
 ```
 
-Compose-Konfiguration, Vault-Key sowie Config- und Export-Volumes beibehalten;
-kein `down -v` verwenden. Eine Digest-Fixierung muss ausdrücklich auf den neuen
-Digest geändert werden. Ein reiner Container-Neustart lädt kein neues Image.
+Keep the Compose configuration, vault key, and config and export volumes;
+do not use `down -v`. If you pin the image by digest, explicitly update it
+to the new digest. Simply restarting the container does not pull a new image.
 
-## Einmalige Einrichtung
+## Initial setup
 
-1. Änderungen committen und nach `main` pushen. GitHub Actions muss im Repo
-   aktiviert sein; der Push startet den ersten Build.
-2. Der Workflow verwendet das vorhandene `GITHUB_TOKEN` mit `contents: write`
-   und `packages: write`. Ein eigener PAT oder Registry-Secret ist nicht nötig.
-   Repository-/Organisationsrichtlinien müssen diese Rechte erlauben.
-3. Nach dem ersten Push das GHCR-Paket bei Bedarf unter **Package settings →
-   Change visibility → Public** öffentlich machen. Neue Pakete können zunächst
-   privat sein; dann benötigen Pulls eine Anmeldung.
-4. Läuft der Workflow in einem Fork, wird automatisch
-   `ghcr.io/<owner>/<repo>` in Kleinschreibung verwendet.
+1. Commit the changes and push to `main`. GitHub Actions must be enabled
+   in the repository; the push starts the first build.
+2. The workflow uses the existing `GITHUB_TOKEN` with `contents: write`
+   and `packages: write`. No separate PAT or registry secret is required.
+   Repository and organization policies must allow these permissions.
+3. After the first push, make the GHCR package public if needed under
+   **Package settings → Change visibility → Public**. New packages may initially
+   be private, in which case pulling them requires authentication.
+4. When the workflow runs in a fork, it automatically uses
+   `ghcr.io/<owner>/<repo>` in lowercase.
 
-GitHub kann geplante Läufe verzögern und deaktiviert sie bei öffentlichen Repos
-nach 60 Tagen ohne Aktivität. In diesem Fall den Zeitplan unter Actions wieder
-aktivieren. Der Zeitplan läuft nur auf dem Standardbranch.
+GitHub may delay scheduled runs and disables them in public repositories after
+60 days of inactivity. If this happens, re-enable the schedule under Actions.
+Scheduled runs execute only on the default branch.
 
-## Verwendung
+## Usage
 
 ```sh
 docker run --rm ghcr.io/kevincfechtel/ente-cli:latest --version
 docker run --rm ghcr.io/kevincfechtel/ente-cli:latest --help
 ```
 
-Die CLI ist der Entrypoint; Argumente folgen direkt nach dem Image-Namen.
-Sie läuft als **UID/GID 1000:1000**. Das CLI-Home liegt unter `/config`;
-Exportziele können unter `/export` eingebunden werden.
+The CLI is the entrypoint; arguments go directly after the image name.
+It runs as **UID/GID 1000:1000**. The CLI home is `/config`;
+export destinations can be mounted at `/export`.
 
-### Einloggen und Fotos exportieren
+### Log in and export photos
 
-Ein Container hat keinen System-Schlüsselbund. Deshalb benötigt die Rust-CLI
-einen eigenen Vault-Key, der bei jedem Aufruf gleich bleiben muss.
+A container has no system credential store. The Rust CLI therefore needs
+its own vault key, which must remain the same across invocations.
 
 ```sh
 umask 077
 mkdir -p "$HOME/.config/ente-cli-container"
-# Nur einmal ausführen; eine vorhandene Datei niemals überschreiben.
+# Run only once; never overwrite an existing file.
 (set -C; docker run --rm ghcr.io/kevincfechtel/ente-cli:latest \
   vault key generate > "$HOME/.config/ente-cli-container/vault-key")
 export ENTE_CLI_VAULT_KEY="$(cat "$HOME/.config/ente-cli-container/vault-key")"
@@ -127,43 +127,43 @@ docker run --rm \
   ghcr.io/kevincfechtel/ente-cli:latest photos export /export --no-input
 ```
 
-Vault-Key getrennt vom CLI-Home sicher aufbewahren und sichern. Ohne diesen
-Schlüssel lässt sich der Vault nicht öffnen. Umgebungsvariablen können von
-Benutzern mit Docker-Zugriff eingesehen werden.
-Bei Bind-Mounts müssen die Ordner für UID/GID 1000:1000 schreibbar sein
-(alternativ `--user UID:GID` verwenden und Zugriffsrechte entsprechend setzen).
-Ein Zeitplan für regelmäßige Fotoexporte ist nicht Teil dieses Images.
+Store and back up the vault key securely, separately from the CLI home.
+Without this key, the vault cannot be opened. Users with Docker access
+can inspect environment variables.
+For bind mounts, the directories must be writable by UID/GID 1000:1000
+(alternatively, use `--user UID:GID` and set permissions accordingly).
+This image does not include a schedule for recurring photo exports.
 
-Weitere Befehle: [Accounts](https://ente.com/help/cli/accounts),
+More commands: [Accounts](https://ente.com/help/cli/accounts),
 [Automation](https://ente.com/help/cli/automation),
-[Migration von der Go-CLI](https://ente.com/help/cli/migration).
+[Migration from the Go CLI](https://ente.com/help/cli/migration).
 
-## Lokal bauen und testen
+## Build and test locally
 
-Die Version wird bewusst explizit übergeben; `latest` wird nicht im Dockerfile
-aufgelöst.
+The version is intentionally passed explicitly; the Dockerfile does not
+resolve `latest`.
 
 ```sh
 python3 -m unittest discover -s tests -v
 python3 scripts/prepare_release.py --repository KevinCFechtel/ente-cli --force
-# Erkannte Version steht in .release/release.json.
+# The detected version is recorded in .release/release.json.
 docker build --build-arg ENTE_CLI_VERSION=0.4.5 -t ente-cli:local .
 bash scripts/smoke-test.sh ente-cli:local 0.4.5
-# Zusätzlich auf einem Linux-amd64-Host mit Docker, OpenSSL und qemu-user-static:
+# Additionally, on a Linux amd64 host with Docker, OpenSSL, and qemu-user-static:
 python3 scripts/test_no_avx.py ente-cli:local 0.4.5
 ```
 
-Die Skripte benötigen Python **3.9+** ohne zusätzliche Python-Pakete.
-Für API-Abfragen kann optional `GH_TOKEN` gesetzt werden, um das höhere
-authentifizierte GitHub-Rate-Limit zu nutzen.
-Quellcode-Builds dauern insbesondere beim ersten Lauf länger als Binary-Downloads.
-Dependabot prüft wöchentlich die Actions-Versionen und die Docker-Basisimages.
+The scripts require Python **3.9+** with no additional Python packages.
+Optionally set `GH_TOKEN` for API requests to use GitHub's higher
+authenticated rate limit.
+Source builds take longer than binary downloads, especially on the first run.
+Dependabot checks GitHub Actions versions and Docker base images weekly.
 
-## Lizenzen und Quellcode
+## Licenses and source code
 
-Die Builddateien dieses Repos stehen unter [BSD-3-Clause](LICENSE).
-Die aus unveränderten Quellen selbst gebaute Ente-CLI steht unter der **AGPL-3.0**;
-ihre Lizenz wird dadurch nicht geändert. Lizenztexte und versionsgenaue
-Quellcode-Links liegen im Image unter `/usr/share/licenses/ente-cli/`.
-Jedes Container-Release verlinkt außerdem den passenden
-[Upstream-Quellcode samt Build-Workflow](https://github.com/ente/ente).
+This repository's build files are licensed under [BSD-3-Clause](LICENSE).
+The Ente CLI built from unmodified sources is licensed under **AGPL-3.0**;
+building it does not change its license. License texts and version-specific
+source code links are included in the image at `/usr/share/licenses/ente-cli/`.
+Each container release also links to the corresponding
+[upstream source code and build workflow](https://github.com/ente/ente).
