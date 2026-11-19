@@ -1,38 +1,51 @@
 # syntax=docker/dockerfile:1
 
-# Download on the builder's architecture; the binary is selected for the target.
-FROM --platform=$BUILDPLATFORM alpine:3.24 AS download
+
+# Build natively for each target. Do not reuse the upstream amd64 binary:
+# 0.4.5 executes AVX even during ring's CPU detection (SIGILL on e.g. J4125).
+FROM rust:1-alpine3.24 AS build
 ARG TARGETARCH
 ARG ENTE_CLI_VERSION
 
-RUN apk add --no-cache ca-certificates curl
-WORKDIR /download
+RUN apk add --no-cache build-base ca-certificates git linux-headers perl pkgconf
 RUN set -eu; \
     echo "$ENTE_CLI_VERSION" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; \
     case "$TARGETARCH" in amd64|arm64) ;; *) exit 1 ;; esac; \
     tag="ente-cli-v${ENTE_CLI_VERSION}"; \
-    archive="${tag}-linux-${TARGETARCH}.tar.gz"; \
-    url="https://github.com/ente/ente/releases/download/${tag}"; \
-    curl --fail --location --retry 3 --output "$archive" "${url}/${archive}"; \
-    curl --fail --location --retry 3 --output SHA256SUMS "${url}/SHA256SUMS"; \
-    awk -v name="$archive" '$2 == name || $2 == "*" name { print }' SHA256SUMS > selected.sha256; \
-    test "$(wc -l < selected.sha256)" -eq 1; \
-    sha256sum --check selected.sha256; \
+    git clone --depth 1 --filter=blob:none --sparse --branch "$tag" \
+      https://github.com/ente/ente.git /src; \
+    git -C /src sparse-checkout set rust
+
+WORKDIR /src/rust
+RUN set -eu; \
+    case "$TARGETARCH" in \
+      amd64) \
+        export RUSTFLAGS="-C target-cpu=x86-64 -C target-feature=-avx,-avx2,-fma"; \
+        export CFLAGS="-march=x86-64 -mtune=generic -mno-avx -mno-avx2 -mno-fma" ;; \
+      arm64) \
+        export RUSTFLAGS="-C target-cpu=generic --cfg chacha20_force_neon"; \
+        export CFLAGS="-march=armv8-a -mno-outline-atomics" ;; \
+      *) exit 1 ;; \
+    esac; \
+    export CXXFLAGS="$CFLAGS"; \
+    cargo build --locked --release --jobs 2 -p ente-cli --bin ente \
+      --features rusqlite/bundled-sqlcipher-vendored-openssl,keyring/vendored; \
     mkdir -p /out/licenses; \
-    tar -xzf "$archive" -C /out ente; \
-    chmod 0755 /out/ente; \
-    curl --fail --location --retry 3 --output /out/licenses/ente-AGPL-3.0.txt \
-      "https://raw.githubusercontent.com/ente/ente/${tag}/LICENSE"; \
-    printf 'Unmodified Ente Rust CLI %s\nLicense: AGPL-3.0\nSource: https://github.com/ente/ente/tree/%s\nSource archive: https://github.com/ente/ente/archive/refs/tags/%s.tar.gz\nBuild instructions: .github/workflows/ente-cli-release.yml in the source archive\n' \
-      "$ENTE_CLI_VERSION" "$tag" "$tag" > /out/licenses/NOTICE
+    cp target/release/ente /out/ente; \
+    test "$(/out/ente --version)" = "ente $ENTE_CLI_VERSION"; \
+    cp /src/LICENSE /out/licenses/ente-AGPL-3.0.txt; \
+    revision="$(git -C /src rev-parse HEAD)"; \
+    printf 'Ente Rust CLI %s, built from unmodified source with generic CPU flags\nLicense: AGPL-3.0\nSource: https://github.com/ente/ente/tree/%s\nSource archive: https://github.com/ente/ente/archive/%s.tar.gz\nBuild instructions: Dockerfile in the container source repository (org.opencontainers.image.source label)\n' \
+      "$ENTE_CLI_VERSION" "$revision" "$revision" > /out/licenses/NOTICE
 
 FROM alpine:3.24
 ARG ENTE_CLI_VERSION
 LABEL org.opencontainers.image.title="Ente CLI (Rust)" \
-      org.opencontainers.image.description="Unofficial container for the unmodified Ente Rust CLI" \
+      org.opencontainers.image.description="Unofficial Ente Rust CLI built from source for generic CPUs" \
       org.opencontainers.image.version="${ENTE_CLI_VERSION}" \
       org.opencontainers.image.licenses="AGPL-3.0 AND BSD-3-Clause" \
-      io.ente.cli.source="https://github.com/ente/ente/tree/ente-cli-v${ENTE_CLI_VERSION}"
+      io.ente.cli.source="https://github.com/ente/ente/tree/ente-cli-v${ENTE_CLI_VERSION}" \
+      io.ente.cli.build="source-generic"
 
 RUN apk add --no-cache ca-certificates \
     && addgroup -g 1000 ente \
@@ -40,8 +53,8 @@ RUN apk add --no-cache ca-certificates \
     && mkdir -p /config /export \
     && chown ente:ente /config /export \
     && chmod 0700 /config
-COPY --from=download /out/ente /usr/local/bin/ente
-COPY --from=download /out/licenses/ /usr/share/licenses/ente-cli/
+COPY --from=build /out/ente /usr/local/bin/ente
+COPY --from=build /out/licenses/ /usr/share/licenses/ente-cli/
 COPY LICENSE /usr/share/licenses/ente-cli/container-BSD-3-Clause.txt
 
 ENV HOME=/home/ente \

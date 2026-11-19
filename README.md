@@ -11,15 +11,18 @@ Der [GitHub-Actions-Workflow](.github/workflows/container.yml):
 2. wählt die semantisch höchste stabile Version mit Tag `ente-cli-vX.Y.Z`
    (keine Go-Releases, Entwürfe oder Vorabversionen);
 3. überspringt bereits veröffentlichte Container-Versionen;
-4. verpackt die offiziellen Linux-Binaries mit SHA256-Prüfung und testet sie
-   nativ für **linux/amd64** und **linux/arm64** als Nicht-Root-Benutzer;
-5. veröffentlicht nach erfolgreichen Tests ein Multi-Arch-Image auf **GHCR**;
-6. erstellt ein GitHub Release `vX.Y.Z` mit den **unveränderten Upstream-Release-Notes**,
+4. baut die unveränderten Quellen des Release-Tags mit `Cargo.lock` nativ für
+   **linux/amd64** und **linux/arm64**, mit generischen Rust- und C/C++-CPU-Flags;
+5. testet beide Images als Nicht-Root-Benutzer und prüft auf amd64 zusätzlich
+   HTTPS/TLS unter QEMU mit einer **Nehalem-CPU ohne AVX**;
+6. veröffentlicht genau diese getesteten Images als Multi-Arch-Image auf **GHCR**;
+7. erstellt ein GitHub Release `vX.Y.Z` mit den **unveränderten Upstream-Release-Notes**,
    Quellcode-Links und dem Image-Digest.
 
 Image: `ghcr.io/kevincfechtel/ente-cli`
 
-Tags: `:X.Y.Z` und `:latest`. Die GitHub Releases sind der Container-Changelog;
+Tags: `:X.Y.Z` und `:latest`, außerdem `:X.Y.Z-amd64` und `:X.Y.Z-arm64`.
+Die GitHub Releases sind der Container-Changelog;
 es werden dafür keine automatischen Commits auf `main` benötigt.
 Beim ersten Lauf wird nur die aktuellste stabile Version gebaut, kein historisches
 Archiv. Auch nach einer Pause wird die aktuellste Version übernommen; dazwischen
@@ -36,10 +39,37 @@ Der Git-Tag eines bestehenden Releases bleibt beim ursprünglichen Commit;
 der tatsächlich verwendete Container-Quellstand steht in den Release Notes und
 im OCI-Label `org.opencontainers.image.revision`.
 
-Fehlgeschlagene Builds oder Pushes erzeugen kein erfolgreiches GitHub Release;
-der nächste tägliche Lauf versucht die Veröffentlichung erneut.
+Fehlgeschlagene Builds oder Pushes erzeugen kein neues erfolgreiches GitHub Release;
+bei noch nicht veröffentlichten Versionen versucht der nächste tägliche Lauf es erneut.
+Schlägt ein Rebuild einer bereits veröffentlichten Version fehl, erneut mit `force`
+starten oder nach einem weiteren Push auf `main` wiederholen.
 Fehlende Upstream-Assets und API-Fehler brechen den Lauf ab, statt versehentlich
 eine andere CLI-Version zu veröffentlichen.
+
+### Synology und Prozessoren ohne AVX
+
+Das offizielle amd64-Binary von Ente CLI 0.4.5 führt in der Kryptografie-Bibliothek
+`ring` eine AVX-Anweisung aus. Auf beispielsweise einem Intel Celeron J4125
+führt das beim Login oder bei HTTPS-Zugriffen zu `SIGILL` / Exit-Code **132**.
+Dieses Image baut deshalb die CLI samt nativen Abhängigkeiten selbst, ohne
+AVX als Voraussetzung. Der Quellcode der CLI bleibt unverändert.
+Der zusätzliche Test übt die TLS-Zertifikatsprüfung gegen einen lokalen
+Testserver aus – nicht nur `--version`. Er benötigt weder ein Ente-Konto noch
+Zugangsdaten und kontaktiert keinen echten Ente-Server.
+
+Nach Push der Container-Änderung auf `main` wird auch eine bereits veröffentlichte
+CLI-Version neu gebaut. Erst wenn alle Prüfungen bestanden wurden, werden deren
+Image-Tag und `latest` aktualisiert. Anschließend auf dem Docker-Host im
+Compose-Verzeichnis ausführen:
+
+```sh
+sudo docker compose pull
+sudo docker compose up -d
+```
+
+Compose-Konfiguration, Vault-Key sowie Config- und Export-Volumes beibehalten;
+kein `down -v` verwenden. Eine Digest-Fixierung muss ausdrücklich auf den neuen
+Digest geändert werden. Ein reiner Container-Neustart lädt kein neues Image.
 
 ## Einmalige Einrichtung
 
@@ -117,19 +147,22 @@ aufgelöst.
 python3 -m unittest discover -s tests -v
 python3 scripts/prepare_release.py --repository KevinCFechtel/ente-cli --force
 # Erkannte Version steht in .release/release.json.
-docker build --build-arg ENTE_CLI_VERSION=0.4.4 -t ente-cli:local .
-bash scripts/smoke-test.sh ente-cli:local 0.4.4
+docker build --build-arg ENTE_CLI_VERSION=0.4.5 -t ente-cli:local .
+bash scripts/smoke-test.sh ente-cli:local 0.4.5
+# Zusätzlich auf einem Linux-amd64-Host mit Docker, OpenSSL und qemu-user-static:
+python3 scripts/test_no_avx.py ente-cli:local 0.4.5
 ```
 
 Die Skripte benötigen Python **3.9+** ohne zusätzliche Python-Pakete.
 Für API-Abfragen kann optional `GH_TOKEN` gesetzt werden, um das höhere
 authentifizierte GitHub-Rate-Limit zu nutzen.
-Dependabot prüft wöchentlich die Actions-Versionen und das Alpine-Basisimage.
+Quellcode-Builds dauern insbesondere beim ersten Lauf länger als Binary-Downloads.
+Dependabot prüft wöchentlich die Actions-Versionen und die Docker-Basisimages.
 
 ## Lizenzen und Quellcode
 
 Die Builddateien dieses Repos stehen unter [BSD-3-Clause](LICENSE).
-Die unverändert eingebundene Ente-CLI steht unter der **AGPL-3.0**;
+Die aus unveränderten Quellen selbst gebaute Ente-CLI steht unter der **AGPL-3.0**;
 ihre Lizenz wird dadurch nicht geändert. Lizenztexte und versionsgenaue
 Quellcode-Links liegen im Image unter `/usr/share/licenses/ente-cli/`.
 Jedes Container-Release verlinkt außerdem den passenden
