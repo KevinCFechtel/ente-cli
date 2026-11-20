@@ -15,9 +15,12 @@ The [GitHub Actions workflow](.github/workflows/container.yml):
    **linux/amd64** and **linux/arm64**, using generic Rust and C/C++ CPU flags;
 5. tests both images as a non-root user and additionally tests HTTPS/TLS on amd64
    under QEMU with a **Nehalem CPU without AVX**;
-6. publishes those exact tested images as a multi-architecture image on **GHCR**;
-7. creates a GitHub release `vX.Y.Z` with the **unmodified upstream release notes**,
-   source code links, and the image digest.
+6. scans both final images with Trivy and blocks publication on **HIGH/CRITICAL**
+   vulnerabilities, including those without an available fix;
+7. publishes those exact tested and scanned images as a multi-architecture image
+   on **GHCR**, with signed provenance and per-architecture SBOM attestations;
+8. creates a GitHub release `vX.Y.Z` with the **unmodified upstream release notes**,
+   source code links, the image digest, and SPDX JSON SBOMs for both architectures.
 
 Image: `ghcr.io/kevincfechtel/ente-cli`
 
@@ -45,6 +48,50 @@ If a rebuild of an already published version fails, rerun it with `force`
 or retry after another push to `main`.
 Missing upstream assets and API errors abort the run rather than accidentally
 publishing a different CLI version.
+
+### Image security
+
+Security checks inspect the **final container images**, not the upstream Ente
+source repository. No Ente CodeQL analysis or separate Cargo audit is performed.
+Both architectures must pass before either is published; the scanned image
+archives are reused for publication without rebuilding.
+
+The [published-image security workflow](.github/workflows/image-security.yml)
+also checks the current `:latest` image daily at **07:23 UTC**, and can be started
+manually under **Actions → Published image security → Run workflow**.
+It resolves the multi-architecture digest once and scans both platforms from
+that immutable reference, even when no new Ente release or container build exists.
+It does not scan every historical version or automatically rebuild or remove images.
+
+Trivy uses a version- and digest-pinned scanner image, maintained by Dependabot,
+and downloads current vulnerability data for each run. Scanner, database, and
+report-generation errors fail the check rather than being treated as clean scans.
+All detected vulnerability severities are retained in SARIF/JSON reports;
+**HIGH/CRITICAL**, including unfixed findings, fail the workflow. There are no
+automatic vulnerability exceptions. Review findings before updating the base
+image or waiting for an upstream release; use `force` to rebuild when appropriate.
+
+Results appear under **Security → Code scanning** and as 30-day workflow artifacts
+(`image-security-amd64` / `image-security-arm64`), including SPDX JSON SBOMs.
+Fork and Dependabot PRs run the same checks and retain artifacts but skip SARIF
+upload because their tokens may be read-only. The use of `codeql-action/upload-sarif`
+only uploads Trivy reports; it does not run CodeQL.
+
+Published releases include downloadable per-architecture SBOMs. Signed provenance
+for the multi-platform digest and SBOM attestations for each architecture's digest
+are stored in GitHub and GHCR, without changing the tested image layers.
+For example, verify provenance using the digest from a release:
+
+```sh
+gh attestation verify 'oci://ghcr.io/kevincfechtel/ente-cli@sha256:<digest>' \
+  --repo KevinCFechtel/ente-cli
+```
+
+Coverage depends on metadata present in the final image. Alpine packages are
+inventoried, but statically linked Rust/native dependencies may not be fully
+discoverable. A clean scan and its SBOM are not proof that every component is
+free of vulnerabilities. The GitHub Dependency Graph continues to cover Actions;
+these image SBOMs are not automatically submitted to it.
 
 ### Synology and CPUs without AVX
 
@@ -75,8 +122,11 @@ to the new digest. Simply restarting the container does not pull a new image.
 
 1. Commit the changes and push to `main`. GitHub Actions must be enabled
    in the repository; the push starts the first build.
-2. The workflow uses the existing `GITHUB_TOKEN` with `contents: write`
-   and `packages: write`. No separate PAT or registry secret is required.
+2. The workflow uses the existing `GITHUB_TOKEN` with `contents: write`,
+   `packages: write`, and `attestations: write` for publication,
+   `security-events: write` for scan uploads, and `id-token: write` for signing.
+   These permissions are restricted to the jobs that need them.
+   No separate PAT or registry secret is required.
    Repository and organization policies must allow these permissions.
 3. After the first push, make the GHCR package public if needed under
    **Package settings → Change visibility → Public**. New packages may initially
@@ -149,6 +199,8 @@ python3 scripts/prepare_release.py --repository KevinCFechtel/ente-cli --force
 # The detected version is recorded in .release/release.json.
 docker build --build-arg ENTE_CLI_VERSION=0.4.5 -t ente-cli:local .
 bash scripts/smoke-test.sh ente-cli:local 0.4.5
+docker save ente-cli:local -o .release/ente-cli-local.tar
+python3 scripts/scan_image.py .release/ente-cli-local.tar security-reports/local
 # Additionally, on a Linux amd64 host with Docker, OpenSSL, and qemu-user-static:
 python3 scripts/test_no_avx.py ente-cli:local 0.4.5
 ```
